@@ -1,0 +1,31 @@
+name: Verify DWARF code-neutral
+
+# Guards that enabling DWARF on a prod kernel config does not change the boot
+# image (loadable segments). Runs on changes to the kernel build inputs and on
+# manual dispatch. Two full kernel builds — keep separate from the release path.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Kernel version to verify (default: all DWARF-enabled x86_64 configs)'
+        required: false
+        type: string
+        default: ''
+  pull_request:
+    paths:
+      - 'configs/x86_64/**'
+      - 'build.sh'
+      - 'scripts/check-loadable-sections.sh'
+      - 'scripts/verify-dwarf-code-neutral.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify DWARF is code-neutral (x86_64)
+        # Empty version => verify every x86_64 config that enables DWARF.
+        run: sudo --preserve-env ./scripts/verify-dwarf-code-neutral.sh "${{ inputs.version }}"

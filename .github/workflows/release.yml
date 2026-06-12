@@ -82,8 +82,27 @@ jobs:
             exit 1
           fi
 
+  # Gate: enabling DWARF on a prod config must be code-neutral (only non-loadable
+  # .debug_* sections added, boot image unchanged). Builds the x86_64 DWARF config
+  # twice (with/without DWARF) and compares loadable segments; `publish` depends on
+  # it, so a non-neutral kernel can never be released. Runs only on the publish path
+  # (PRs are covered by verify-dwarf-neutral.yml).
+  verify-dwarf:
+    needs: matrix
+    if: github.event_name == 'workflow_dispatch'
+    name: Verify DWARF code-neutral (x86_64)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify DWARF is code-neutral
+        # No version: verifies every x86_64 config that enables DWARF (auto-tracks
+        # whichever kernel currently carries it), so a bump can't bypass the gate.
+        run: sudo --preserve-env ./scripts/verify-dwarf-code-neutral.sh
+
   publish:
-    needs: build
+    needs: [build, verify-dwarf]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
