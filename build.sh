@@ -25,7 +25,7 @@ normalize_arch() {
 install_dependencies() {
   local target_arch="$1"
   local packages=(
-    bc bison busybox-static cpio curl flex gcc libelf-dev libssl-dev make patch squashfs-tools tree
+    bc binutils bison busybox-static cpio curl flex gcc libelf-dev libssl-dev make patch squashfs-tools tree
   )
 
   [[ "$target_arch" == "arm64" && "$HOST_ARCH" != "aarch64" ]] && packages+=( gcc-aarch64-linux-gnu )
@@ -93,16 +93,23 @@ build_version() {
 
   echo "Copying finished build to builds directory"
   local out_dir="$SCRIPT_DIR/builds/vmlinux-${version}/${output_arch}"
+  local legacy_dir="$SCRIPT_DIR/builds/vmlinux-${version}"
   mkdir -p "$out_dir"
   if [[ "$target_arch" == "arm64" ]]; then
     cp arch/arm64/boot/Image "$out_dir/vmlinux.bin"
+  elif readelf -S vmlinux | grep -q '\.debug_info'; then
+    # The config builds with DWARF. Ship a lean boot image (loadable segments +
+    # symtab, DWARF stripped) plus a split vmlinux.debug companion. --strip-debug
+    # only removes non-loadable .debug_* sections, so the boot image's loadable
+    # segments are unchanged vs a no-DWARF build.
+    objcopy --only-keep-debug vmlinux "$out_dir/vmlinux.debug"
+    objcopy --strip-debug vmlinux "$out_dir/vmlinux.bin"
+    # legacy path (x86_64, no arch subdir) for backwards compat
+    cp "$out_dir/vmlinux.bin" "$legacy_dir/vmlinux.bin"
+    cp "$out_dir/vmlinux.debug" "$legacy_dir/vmlinux.debug"
   else
     cp vmlinux "$out_dir/vmlinux.bin"
-  fi
-
-  # x86_64: also copy to legacy path (no arch subdir) for backwards compat.
-  if [[ "$target_arch" == "x86_64" ]]; then
-    cp vmlinux "$SCRIPT_DIR/builds/vmlinux-${version}/vmlinux.bin"
+    cp vmlinux "$legacy_dir/vmlinux.bin"
   fi
 }
 
